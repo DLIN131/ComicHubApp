@@ -24,19 +24,25 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -221,28 +227,32 @@ fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
     }
 }
 
+/**
+ * 小圓角選項。不用 Material 的 Button：它會強制 48dp 的觸控高度，
+ * 好幾排疊在一起時整片擠成一團（v1.0.2 手機上回報過）。
+ */
 @Composable
 fun Chip(text: String, selected: Boolean, color: Color = Accent, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-        modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) color else Surface),
+    Box(
+        Modifier
+            .height(30.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(if (selected) color else Surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(text, fontSize = 13.sp, maxLines = 1)
+        Text(text, fontSize = 13.sp, maxLines = 1, color = if (selected) Color.White else Color(0xFFD5D8DE))
     }
 }
 
-/** 一排可以左右滑的選項 */
+/** 一排可以左右滑的選項（排序、書櫃分組） */
 @Composable
 fun ChipRow(options: List<Pair<String, String>>, selected: String, modifier: Modifier = Modifier, colorOf: (String) -> Color = { Accent }, onSelect: (String) -> Unit) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(horizontal = 10.dp),
-        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
         items(options.size) { i ->
             val (key, label) = options[i]
@@ -251,10 +261,57 @@ fun ChipRow(options: List<Pair<String, String>>, selected: String, modifier: Mod
     }
 }
 
-/** 語言篩選列：全部語言 / 中文 / English / 日本語 */
+/** 站別分頁：文字＋底下一條該站顏色的線，跟下面的排序選項長得不一樣，才分得出來 */
 @Composable
-fun LangRow() {
-    ChipRow(listOf("" to "全部語言") + Lang.NAMES.toList(), Nav.lang) { Nav.changeLang(it) }
+fun SiteTabs(options: List<Pair<String, String>>, selected: String, colorOf: (String) -> Color, onSelect: (String) -> Unit) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.fillMaxWidth()) {
+        items(options.size) { i ->
+            val (key, label) = options[i]
+            val on = key == selected
+            Column(
+                Modifier.clickable { onSelect(key) }.padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(label, fontSize = 14.sp, maxLines = 1, color = if (on) Color.White else Muted, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                Box(
+                    Modifier.padding(top = 4.dp).height(3.dp).width(22.dp).clip(RoundedCornerShape(2.dp))
+                        .background(if (on) colorOf(key) else Color.Transparent)
+                )
+            }
+        }
+    }
+}
+
+/** 語言篩選：一顆小按鈕＋下拉選單（全部語言 / 中文 / English / 日本語），不再佔一整排 */
+@Composable
+fun LangButton(modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val lang = Nav.lang
+    Box(modifier) {
+        Row(
+            Modifier
+                .height(30.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(if (lang.isEmpty()) Surface else Accent)
+                .clickable { open = true }
+                .padding(start = 12.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(Lang.NAMES[lang] ?: "全部語言", fontSize = 13.sp, color = Color.White, maxLines = 1)
+            Icon(Icons.Filled.ArrowDropDown, null, tint = Color.White)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for ((k, label) in listOf("" to "全部語言") + Lang.NAMES.toList()) {
+                DropdownMenuItem(
+                    text = { Text(label, color = if (k == lang) Accent else Color.White) },
+                    onClick = {
+                        open = false
+                        Nav.changeLang(k)
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

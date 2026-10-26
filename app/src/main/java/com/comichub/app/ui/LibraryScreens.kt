@@ -92,12 +92,15 @@ object FavState {
 @Composable
 fun FavoritesScreen() {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionTitle("網站收藏", Modifier.weight(1f))
+            LangButton()
+        }
         val tabs = SiteConfig.KEYS.map { it to SiteConfig.label(it) }
-        ChipRow(tabs, FavState.site, colorOf = { siteColor(it) }) {
+        SiteTabs(tabs, FavState.site, colorOf = { siteColor(it) }) {
             FavState.site = it
             Prefs.favSite = it
         }
-        LangRow()
         val key = FavState.site
         var auth by remember(key) { mutableStateOf(FavState.auth[key]) }
         var attempt by remember(key) { mutableStateOf(0) }
@@ -147,11 +150,11 @@ fun HistoryScreen() {
     val lang = Nav.lang
     val list = History.items.filter { lang.isEmpty() || it.lang == lang }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 10.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionTitle("最近看過", Modifier.weight(1f))
-            if (History.items.isNotEmpty()) TextButton(onClick = { confirm = true }) { Text("清除紀錄") }
+            if (History.items.isNotEmpty()) TextButton(onClick = { confirm = true }) { Text("清除") }
+            LangButton()
         }
-        LangRow()
         if (list.isEmpty()) CenterText("還沒有看過的作品")
         else LazyVerticalGrid(
             columns = GridColumns,
@@ -214,6 +217,7 @@ fun ShelfScreen() {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionTitle("書櫃", Modifier.weight(1f))
+            LangButton()
             val active = Downloads.activeCount
             TextButton(onClick = { Nav.push(Route.Downloads) }) { Text(if (active > 0) "下載中（$active）" else "下載") }
             IconButton(onClick = { picker.launch(arrayOf("application/zip", "application/x-cbz", "application/vnd.comicbook+zip", "application/octet-stream")) }) {
@@ -223,7 +227,6 @@ fun ShelfScreen() {
         }
         val opts = listOf(ALL to "全部", COLLECTIONS to "合集") + groups.map { it to it } + listOf(NO_GROUP to "未分組")
         ChipRow(opts, ShelfState.filter) { ShelfState.filter = it }
-        LangRow()
         val f = ShelfState.filter
         val books = Library.books.filter { b ->
             (lang.isEmpty() || b.lang == lang) && when (f) {

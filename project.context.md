@@ -75,7 +75,10 @@
 ## 5. 開發、測試、發布
 
 - 建置：`./gradlew assembleRelease`（本機用 `keystore/keystore.properties` 簽章；`keystore/` 不進 git）。產出 `app/build/outputs/apk/release/app-release.apk`，同時複製到 `dist/ComicHub.apk`（不進 git）。
-- 測試：`FIXTURES=<存檔資料夾> ./gradlew :app:testDebugUnitTest`。使用者不要用模擬器測（電腦太慢），沒有實機可接時只能靠單元測試 + 仔細檢查。
+- 測試：`FIXTURES=<存檔資料夾> ./gradlew :app:testDebugUnitTest`。使用者不要用模擬器測（電腦太慢），沒有實機可接。
+- **畫面測試（v1.0.3 起）**：`app/src/test/.../ui/HomeUiTest.kt` 用 Robolectric（Native Graphics）+ Roborazzi 在 JVM 上真的開 `MainActivity`、操作、截圖到 `app/build/ui/*.png`，改畫面後一定要跑來看。
+  會真的連網（NH / WN / EH 一般 HTTP 抓得到；JM 要真的 WebView，測試裡會一直轉圈是正常的），所以要 `UI_TEST=1` 才跑：
+  `UI_TEST=1 ./gradlew :app:testDebugUnitTest --tests '*HomeUiTest*'`。Robolectric 的時鐘不會自己走，等網路時要 `Thread.sleep` + `rule.mainClock.advanceTimeBy`。截圖時封面還沒載完是正常的。
 - 發布：commit 訊息 = 更新說明（繁體中文、給使用者看的條列，結尾 `Co-Authored-By` 行），推到 `main` 自動發布；`*.md` 的改動不觸發發布。
   CI 需要 GitHub Secrets：`KEYSTORE_BASE64`、`SIGNING_STORE_PASSWORD`、`SIGNING_KEY_ALIAS`、`SIGNING_KEY_PASSWORD`（值在本機 `keystore/`）。
 
@@ -93,3 +96,13 @@
 ### v1.0.2（2026-10-26）修正版本號顯示
 - 修：「帳號」頁把正式版 v1.0.1 顯示成「開發版」。原因：用 versionCode ≤ 1 判斷開發版，但 CI 第一版的 versionCode 剛好是 1。
 - 改成看版本名稱：CI 打包是 `1.0.<run_number>`，本機打包（沒有 BUILD_NUMBER）是 `1.0.dev` → 顯示「開發版」（`app/build.gradle.kts`、`Updater.currentVersionName`）。
+
+### v1.0.3（2026-10-26）篩選列重新排版、修正首頁語言篩選
+- 修：首頁切到「中文」沒反應。原因：「全部」那頁是 LazyColumn，每站一個 `item(key = 站別)`；換語言時新的 Feed 有建立，但列表項目一直拿著換語言前的那個 Feed（新的從來沒載入）。
+  改成：換語言時用 `key(lang)` 把整個首頁列表重建、item key 也帶語言、Feed 清單 `remember(lang)`。畫面測試確認切中文後 NH 25/25、WN 80/80、EH 25/25 都是中文。
+- 修：篩選相關的 UI 擠成一團。原因：選項用 Material `TextButton` 做，它強制 48dp 觸控高度，`.height(32.dp)` 沒用，語言、站別、排序三排疊在一起像一整片。
+  改成：`Chip` 自己畫（30dp、不用 Button）；語言改成搜尋列旁邊的下拉按鈕 `LangButton`（收藏、紀錄、書櫃、搜尋頁也是放在標題列）；站別改成文字＋底線的分頁 `SiteTabs`，跟下面的排序選項長得不一樣。
+- 搜尋後才換語言會用新語言重搜（`SearchState.lang`）。
+- 主畫面 Scaffold 的 `contentWindowInsets` 設 0：各分頁自己有 `statusBarsPadding`，原本手機上方會空兩倍高。
+- 本機打包的開發版不再自動跳「發現新版本」。
+- 新增畫面測試工具（Robolectric + Roborazzi，見上面「開發、測試、發布」）。

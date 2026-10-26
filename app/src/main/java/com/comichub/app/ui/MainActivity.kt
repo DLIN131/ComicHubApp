@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 LaunchedEffect(Unit) {
+                    // 本機打包的開發版不自動跳更新（要更新可到「帳號」頁手動檢查）
+                    if (Updater.isDev) return@LaunchedEffect
                     runCatching { Updater.check() }.getOrNull()
                         ?.takeIf { it.versionCode != Prefs.skippedVersion }
                         ?.let { Updater.pending = it }
@@ -135,6 +138,8 @@ class MainActivity : ComponentActivity() {
 private fun MainScreen() {
     Scaffold(
         containerColor = Background,
+        // 各分頁自己加 statusBarsPadding；這裡不再算一次，不然手機上方會空兩倍高
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar(containerColor = Surface) {
                 val icons = mapOf(

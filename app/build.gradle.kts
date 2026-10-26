@@ -59,6 +59,14 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // 畫面測試（Robolectric）要讀得到資源；沒有手機也沒開模擬器時用它看畫面、跑操作
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.systemProperty("roborazzi.test.record", "true")
+            it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            System.getenv("FIXTURES")?.let { f -> it.environment("FIXTURES", f) }
+            it.maxHeapSize = "3g"
+        }
     }
 }
 
@@ -81,4 +89,9 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.15.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

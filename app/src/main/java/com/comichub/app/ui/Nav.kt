@@ -113,7 +113,7 @@ class SearchState(val q: String, sites: List<String>, val keyword: Boolean) {
     }
     var filter by mutableStateOf("all")
     val grid = LazyGridState()
-    private val lang = Lang.filter
+    val lang = Lang.filter
 
     val shown get() = if (filter == "all") states else states.filter { it.site == filter }
 

@@ -37,7 +37,9 @@ object Updater {
     var pending by mutableStateOf<Release?>(null)
 
     val currentVersionCode: Int get() = BuildConfig.VERSION_CODE
-    val currentVersionName: String get() = if (BuildConfig.VERSION_NAME.endsWith("dev")) "開發版" else "v" + BuildConfig.VERSION_NAME
+    /** 本機打包（沒經過 CI）的版本 */
+    val isDev: Boolean get() = BuildConfig.VERSION_NAME.endsWith("dev")
+    val currentVersionName: String get() = if (isDev) "開發版" else "v" + BuildConfig.VERSION_NAME
 
     private val client by lazy {
         OkHttpClient.Builder()

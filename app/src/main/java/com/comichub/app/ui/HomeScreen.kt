@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,35 +66,42 @@ object HomeState {
 fun HomeScreen() {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         // 搜尋列（點了進搜尋頁）
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 10.dp, end = 10.dp, top = 8.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(Surface)
-                .clickable { Nav.search("") }
-                .padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, null, tint = Muted)
+        // 搜尋列（點了進搜尋頁）＋語言
+        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Surface)
+                    .clickable { Nav.search("") }
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Search, null, tint = Muted)
+                Spacer(Modifier.width(8.dp))
+                Text("搜尋或輸入編號 / 網址", color = Muted, fontSize = 14.sp, maxLines = 1)
+            }
             Spacer(Modifier.width(8.dp))
-            Text("搜尋所有站，或輸入編號 / 網址", color = Muted, fontSize = 14.sp)
+            LangButton()
         }
-        LangRow()
+        Spacer(Modifier.height(4.dp))
         val tabs = listOf("all" to "全部") + SiteConfig.KEYS.map { it to SiteConfig.label(it) }
-        ChipRow(tabs, HomeState.site, Modifier.padding(top = 0.dp), colorOf = { if (it == "all") Accent else siteColor(it) }) {
+        SiteTabs(tabs, HomeState.site, colorOf = { if (it == "all") Accent else siteColor(it) }) {
             HomeState.site = it
             Prefs.homeSite = it
         }
         val lang = Nav.lang
-        if (HomeState.site == "all") AllSites(lang) else SiteHome(HomeState.site, lang)
+        // 換語言時整個列表重建：舊版列表項目一直拿著換語言前的資料，中文篩選在首頁沒反應（v1.0.2）
+        key(lang) {
+            if (HomeState.site == "all") AllSites(lang) else SiteHome(HomeState.site, lang)
+        }
     }
 }
 
 /** 「全部」：四站各一排最新更新 */
 @Composable
 private fun AllSites(lang: String) {
-    val feeds = SiteConfig.KEYS.map { k -> k to Feeds.get("home_$k") { site(k).latest(it) } }
+    val feeds = remember(lang) { SiteConfig.KEYS.map { k -> k to Feeds.get("home_$k") { site(k).latest(it) } } }
     val allFailed by remember(lang) { derivedStateOf { feeds.all { it.second.error != null } } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         if (allFailed) item {
@@ -107,7 +115,7 @@ private fun AllSites(lang: String) {
             }
         }
         for ((k, feed) in feeds) {
-            item(key = k) {
+            item(key = "$k|$lang") {
                 LaunchedEffect(feed) { if (feed.items.isEmpty() && !feed.end && feed.error == null) feed.loadMore() }
                 Column(Modifier.padding(top = 8.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -186,19 +194,27 @@ fun SearchScreen(route: Route.Search) {
             )
             IconButton(onClick = { go() }) { Icon(Icons.Filled.Search, "搜尋", tint = Color.White) }
         }
-        // 要搜哪幾站（可複選）
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp),
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        ) {
-            items(SiteConfig.KEYS) { k ->
-                Chip(SiteConfig.label(k), k in sites, siteColor(k)) {
-                    sites = if (k in sites) sites - k else SiteConfig.KEYS.filter { it in sites || it == k }
+        // 要搜哪幾站（可複選）＋語言
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                items(SiteConfig.KEYS) { k ->
+                    Chip(SiteConfig.label(k), k in sites, siteColor(k)) {
+                        sites = if (k in sites) sites - k else SiteConfig.KEYS.filter { it in sites || it == k }
+                    }
                 }
             }
+            LangButton(Modifier.padding(end = 10.dp))
         }
-        LangRow()
+        // 搜尋後才換語言：用新的語言重搜
+        val lang = Nav.lang
+        LaunchedEffect(lang) {
+            val old = route.state
+            if (old != null && old.lang != lang) route.state = SearchState(old.q, sites, old.keyword)
+        }
         val st = route.state
         if (st == null) CenterText("輸入關鍵字搜尋勾選的站；輸入編號（例如 JM123456、#123456）或貼上作品網址會直接找那一本")
         else SearchResults(st) {
