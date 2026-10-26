@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="updates" path="updates/" />
+    <external-files-path name="books" path="downloads/" />
+    <files-path name="books_internal" path="downloads/" />
+</paths>
