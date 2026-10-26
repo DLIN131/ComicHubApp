@@ -9,10 +9,15 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.comichub.app.data.Favorites
+import com.comichub.app.net.SiteConfig
+import com.comichub.app.net.SiteFav
+import com.comichub.app.net.site
+import kotlinx.coroutines.runBlocking
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.comichub.app.net.Lang
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,21 +37,37 @@ class HomeUiTest {
     @get:Rule
     val rule = createAndroidComposeRule<MainActivity>()
 
+    /** 導覽、列表快取是整個 App 共用的，同一次跑好幾個測試時要先回到首頁的初始狀態 */
+    @Before
+    fun reset() {
+        rule.runOnUiThread {
+            while (Nav.pop()) Unit
+            Nav.tab = Tab.Home
+            HomeState.site = "all"
+            Feeds.clear()
+        }
+        rule.waitForIdle()
+    }
+
     private fun shot(name: String) {
         rule.waitForIdle()
         rule.onRoot().captureRoboImage("build/ui/$name.png")
     }
 
     /** 等首頁這幾站的列表載完（Robolectric 的時鐘要自己推） */
+    /** 等首頁自己建立、載完這幾站的列表（不自己建，免得搶在首頁前面建出空的） */
     private fun waitFeeds(keys: List<String>, seconds: Int = 60): List<Pair<String, Feed>> {
-        val feeds = keys.map { it to Feeds.get("home_$it") { error("沒有被首頁建立") } }
+        fun current() = keys.map { k -> k to Feeds.find("home_$k") }
         repeat(seconds) {
-            if (feeds.all { (_, f) -> f.items.isNotEmpty() || f.error != null || f.end }) return feeds
+            val now = current()
+            if (now.all { (_, f) -> f != null && (f.items.isNotEmpty() || f.error != null || f.end) }) return now.map { it.first to it.second!! }
             Thread.sleep(1000)
             rule.mainClock.advanceTimeBy(1000)
             rule.waitForIdle()
         }
-        return feeds
+        val now = current()
+        for ((k, f) in now) assertTrue("首頁沒有建立 $k 的列表", f != null)
+        return now.map { it.first to it.second!! }
     }
 
     private fun pump(seconds: Int) = repeat(seconds * 2) {
@@ -92,6 +113,32 @@ class HomeUiTest {
         rule.onAllNodesWithText("取消收藏").onLast().performClick()
         rule.waitForIdle()
         assertTrue("取消收藏沒有成功", !Favorites.has(item.site, item.id))
+    }
+
+    /** 沒登入時按「加到網站收藏」→ 跳出需要登入；EH / WN 的收藏表單真的連網，沒登入要被認出來 */
+    @Test
+    fun siteFavoriteNeedsLogin() {
+        assumeTrue(System.getenv("UI_TEST") == "1")
+        rule.runOnUiThread { Nav.changeLang("") }
+        val feeds = waitFeeds(listOf("nh", "wn", "eh")).toMap()
+        val nh = feeds.getValue("nh").items.first()
+        rule.runOnUiThread { Nav.openItem(nh) }
+        repeat(30) { if ((Nav.top as? Route.Detail)?.detail == null) pump(1) }
+        val label = SiteConfig.label("nh")
+        rule.onNodeWithText("☆ 加到 $label 收藏").performClick()
+        repeat(20) { if (rule.onAllNodesWithText("需要登入").fetchSemanticsNodes().isEmpty()) pump(1) }
+        shot("site_fav_login")
+        rule.onNodeWithText("需要登入").assertExists()
+
+        for (k in listOf("eh", "wn")) {
+            val item = feeds.getValue(k).items.first()
+            val r = runBlocking {
+                val d = site(k).detail(item.id)
+                runCatching { SiteFav.form(d) }
+            }
+            println("$k form while logged out: ${r.exceptionOrNull()?.javaClass?.simpleName} ${r.exceptionOrNull()?.message}")
+            assertTrue("$k 沒登入時應該要求登入", r.exceptionOrNull() is SiteFav.NeedLogin)
+        }
     }
 
     @Test

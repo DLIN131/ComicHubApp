@@ -28,6 +28,7 @@
 | `net/Net.kt` | OkHttp（cookie 跟 WebView 共用 `WebCookieJar`）、統一 UA、NH token（`access_token` cookie → `Authorization: User …`，401 時 `/auth/refresh`）、錯誤訊息、下載用 `bytes()`、登出清 cookie |
 | `net/WebFetcher.kt` | 隱藏 WebView 抓 HTML（JM 一律走這裡；其他站被 Cloudflare 擋到時也改走這裡） |
 | `net/Sites.kt` | 四站轉接層 `Nh` / `Jm` / `Wn` / `Eh`（`parseXxx` 只吃字串，可 JVM 測試）、`Query`（編號搜尋、作者、整理書名） |
+| `net/SiteFav.kt` | 加到網站帳號的收藏（JM 送 ajax；EH / WN 讀網站自己的收藏表單照欄位送出） |
 | `net/Auth.kt` | 各站登入狀態（跟桌面版 `checkAuth` / `authStatus` 一樣，含「登入過期」判斷）、帳號名稱、登出 |
 | `data/Store.kt` | `state.json`：紀錄、進度、合集、書櫃分組、下載紀錄（暫存檔改名 + `.bak`） |
 | `data/Favorites.kt` | 本機收藏（state.json 的 `favorites`，四站都能收、不用登入） |
@@ -114,3 +115,16 @@
 - 作品頁：右上角 ♡ ＋按鈕列的「收藏 / 已收藏」；NH 有登入時另外有「加到網站收藏」文字按鈕（原本的網站收藏移到這裡）。按鈕列加 `contentPadding`、`softWrap = false`，「已收藏」不會斷成兩行。
 - 「收藏」頁：第一個分頁「本機收藏」（看過的顯示看到哪、長按確認後取消），後面是各站的網站帳號收藏；預設停在本機收藏（`Prefs.favSite` 預設 `local`）。
 - 畫面測試 `HomeUiTest.localFavorites`：作品頁按收藏 → 收藏頁看得到 → 長按取消，整段實際操作通過。
+
+### v1.0.5（2026-10-26）加到網站帳號的收藏（四個站）
+- 使用者要「收藏到對應帳號下」：原本只有 NH 登入後能加網站收藏。現在作品頁每個站都有「☆ 加到〔站名〕收藏」（`DetailScreen.SiteFavButton`）：
+  - 先確認登入（`Auth.status`），沒登入跳「需要登入」→ 登入頁。
+  - **NH**：API `POST/DELETE /api/v2/galleries/{id}/favorite`（加 / 移除切換，原本就有）。
+  - **JM**：`POST /ajax/favorite_album`（`album_id`、`fid=0` 預設收藏夾），回 JSON，`status != 1` 時顯示網站的 `msg`。端點參考開源的網頁版客戶端寫法；沒有帳號實測過。走隱藏 WebView 的 fetch POST（`WebFetcher.post`，要過 Cloudflare）。
+  - **EH**：GET `gallerypopups.php?gid=&t=&act=addfav`（網站的加入收藏彈窗），**WN**：GET `/users-addfav-id-{id}.html`。用 `SiteFav.parseForm` 讀表單：action、所有欄位（hidden / text / textarea / 選中的 radio / 第一個 submit）、收藏夾選項（第一組 radio 或第一個 select；名稱從 `label[for]` 或往上三層找有字的元素）。有多個收藏夾時讓使用者選，EH 已收藏時多一個 `favdel`＝從收藏移除。照表單送出（帶 `X-Requested-With`），顯示網站回的訊息。
+  - 不用猜欄位名稱：網站表單長怎樣就送什麼。表單抓不到 / 是登入頁 → `NeedLogin`；其他錯誤 → 對話框提供「在網頁上收藏」（App 內 WebView，共用登入，用網站自己的按鈕）。
+  - EH 作品頁的 `#favoritelink` 看得出收在哪個收藏夾（`Detail.siteFav`），按鈕顯示「★ 已在…收藏（收藏夾）」，加完會重抓作品頁。
+- 作品頁「用瀏覽器開網頁」改成「開啟網頁」＝ App 內 WebView（有登入，外部瀏覽器沒有）。
+- 修：`Feeds.clear()`（登入、登出、改網址、加網站收藏後）以前只清快取，畫面上還留著舊列表。現在 `Feeds.version` 會 +1，首頁 / 收藏頁的 `remember` 和 LazyColumn item key 都帶它，清掉就會重建。
+- 測試：`SiteFavTest`（EH 樣式、WN 樣式表單解析）；`HomeUiTest.siteFavoriteNeedsLogin` 真的連網：沒登入按按鈕會跳「需要登入」，EH / WN 的收藏表單在沒登入時會被認成登入頁。`HomeUiTest` 加 `@Before reset()`（導覽、快取是全域的，同一次跑多個測試會互相影響）。
+- **沒有實測的部分**：登入後真的送出收藏（JM / EH / WN）——沒有使用者帳號可以測，要等使用者在手機上試。

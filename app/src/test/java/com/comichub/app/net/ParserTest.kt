@@ -101,6 +101,8 @@ class ParserTest {
         val d = Eh.parseDetail("${m.groupValues[1]}_${m.groupValues[2]}", dhtml)
         println("eh detail: ${d.title} pages=${d.pages} info=${d.info} tags=${d.tags.take(5)} cover=${d.cover}")
         assertTrue(d.cover.startsWith("http"))
+        // 沒登入的頁面：收藏連結是「Add to Favorites」→ 不算已收藏
+        assertEquals(null, d.siteFav)
         val links = Eh.pageLinks(dhtml)
         println("eh links: ${links.size} ${links.firstOrNull()}")
         assertTrue(links.isNotEmpty())

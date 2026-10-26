@@ -116,6 +116,27 @@ object Net {
         }
     }
 
+    /** 送表單（application/x-www-form-urlencoded），回傳原始結果；JM 這類要過驗證的站走隱藏 WebView */
+    suspend fun postForm(site: String, path: String, form: List<Pair<String, String>>): Resp {
+        val url = full(site, path)
+        val body = form.joinToString("&") { (k, v) -> "${enc(k)}=${enc(v)}" }
+        try {
+            if (site in viaWeb && SiteConfig.siteForUrl(url) == site) return WebFetcher.post(site, url, body)
+            return withContext(Dispatchers.IO) {
+                val req = Request.Builder().url(url)
+                    .header("Referer", SiteConfig.base(site) + "/")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .post(body.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaType()))
+                    .build()
+                http.newCall(req).execute().use { r -> Resp(r.code, r.request.url.toString(), r.body?.string().orEmpty()) }
+            }
+        } catch (e: UnknownHostException) {
+            throw NetException("連不上網站（網路中斷或網站被擋）")
+        } catch (e: java.net.SocketTimeoutException) {
+            throw NetException("連線逾時，請稍後再試")
+        }
+    }
+
     private suspend fun okFetch(site: String, url: String, method: String, token: String?): Resp = withContext(Dispatchers.IO) {
         val b = Request.Builder().url(url).header("Referer", SiteConfig.base(site) + "/")
         if (token != null) b.header("Authorization", "User $token")

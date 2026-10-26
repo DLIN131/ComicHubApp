@@ -127,12 +127,25 @@ object WebFetcher {
         }
     }
 
-    private suspend fun jsFetch(site: String, url: String): Resp {
+    /** 送表單（加入收藏等）：在隱藏 WebView 裡用 fetch POST，帶網站自己的 cookie */
+    suspend fun post(site: String, url: String, body: String): Resp {
+        ensureReady(site)
+        val init = "{credentials: 'include', method: 'POST', body: ${JSONObject.quote(body)}, " +
+            "headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest'}}"
+        val r = jsFetch(site, url, init)
+        if (Net.isChallenge(r.status, r.text)) {
+            ready.remove(site)
+            throw blocked(site)
+        }
+        return r
+    }
+
+    private suspend fun jsFetch(site: String, url: String, init: String = "{credentials: 'include'}"): Resp {
         val id = seq.incrementAndGet()
         val result = CompletableDeferred<Resp>()
         pending[id] = result
         val js = """
-            fetch(${JSONObject.quote(url)}, {credentials: 'include'})
+            fetch(${JSONObject.quote(url)}, $init)
               .then(function (r) { return r.text().then(function (t) { AppBridge.done($id, r.status, r.url, t); }); })
               .catch(function (e) { AppBridge.done($id, -1, '', String(e)); });
         """.trimIndent()

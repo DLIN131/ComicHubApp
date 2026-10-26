@@ -188,7 +188,7 @@ private fun SiteFavorites(key: String) {
                 }
             }
             else -> {
-                val feed = remember(key, lang) { Feeds.get("fav_$key") { site(key).favorites(it) } }
+                val feed = remember(key, lang, Feeds.version) { Feeds.get("fav_$key") { site(key).favorites(it) } }
                 FeedGrid(feed, empty = "網站上的收藏是空的")
             }
         }

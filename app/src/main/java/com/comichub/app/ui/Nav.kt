@@ -91,8 +91,20 @@ class Feed(private val loader: suspend (page: Int) -> PageResult) {
 /** 列表快取：同一個站 / 排序 / 語言的列表留著，切回來不用重載 */
 object Feeds {
     private val map = HashMap<String, Feed>()
+
+    /** clear() 時 +1；畫面用它當 remember 的鍵，清掉後才會真的換成新的列表（登入、登出、網址改了之後） */
+    var version by mutableIntStateOf(0)
+        private set
+
     fun get(key: String, loader: suspend (Int) -> PageResult): Feed = map.getOrPut("$key|${Lang.filter}") { Feed(loader) }
-    fun clear() = map.clear()
+
+    /** 已經建立的列表（測試用） */
+    fun find(key: String): Feed? = map["$key|${Lang.filter}"]
+
+    fun clear() {
+        map.clear()
+        version++
+    }
 }
 
 /** 多站搜尋：每站各自載入，「全部」時交錯排列（才不會一站洗版） */

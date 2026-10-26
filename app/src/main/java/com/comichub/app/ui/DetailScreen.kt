@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +67,10 @@ import com.comichub.app.net.Item
 import com.comichub.app.net.Net
 import com.comichub.app.net.Nh
 import com.comichub.app.net.Query
+import com.comichub.app.net.Auth
+import com.comichub.app.net.Eh
+import com.comichub.app.net.SiteConfig
+import com.comichub.app.net.SiteFav
 import com.comichub.app.net.site
 import kotlinx.coroutines.launch
 
@@ -184,24 +189,9 @@ private fun DetailBody(route: Route.Detail, d: Detail) {
                     OutlinedButton(onClick = { showSearch = true }, contentPadding = pad, modifier = Modifier.weight(1.4f)) { Text("用此漫畫搜尋", maxLines = 1, softWrap = false) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(d.url))) }
-                    }) { Text("用瀏覽器開網頁") }
-                    // NH 有登入時，也可以加到網站帳號的收藏
-                    route.favorite?.let { on ->
-                        val scope = rememberCoroutineScope()
-                        TextButton(onClick = {
-                            scope.launch {
-                                try {
-                                    Nh.setFavorite(d.id, !on)
-                                    route.favorite = !on
-                                    toast(if (!on) "已加入網站收藏" else "已從網站收藏移除")
-                                } catch (e: Exception) {
-                                    toast("網站收藏失敗：${e.message}")
-                                }
-                            }
-                        }) { Text(if (on) "★ 已在網站收藏" else "☆ 加到網站收藏") }
-                    }
+                    SiteFavButton(route, d, Modifier.weight(1f))
+                    // 在 App 裡開網頁：跟這裡共用登入，可以用網站自己的按鈕收藏、留言
+                    TextButton(onClick = { Nav.push(Route.Web(d.site, d.url)) }) { Text("開啟網頁") }
                 }
                 if (d.chapters.size > 1) {
                     Spacer(Modifier.height(10.dp))
@@ -318,6 +308,131 @@ private fun ChapterChip(c: Chapter, current: Boolean, onClick: () -> Unit) {
 }
 
 val FavColor = Color(0xFFFF5C7A)
+
+/**
+ * 加到網站帳號的收藏（每個站都有）：先確認有登入，NH 用 API 切換、JM 直接送、EH / WN 用網站自己的收藏表單（有好幾個收藏夾時讓使用者選）。
+ * 失敗時可以改在 App 裡開網頁，用網站自己的按鈕收藏。
+ */
+@Composable
+private fun SiteFavButton(route: Route.Detail, d: Detail, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var picker by remember { mutableStateOf<SiteFav.Form?>(null) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    var needLogin by remember { mutableStateOf(false) }
+    val label = SiteConfig.label(d.site)
+
+    fun done(msg: String) {
+        toast(msg)
+        // 網站收藏頁的列表要重抓
+        Feeds.clear()
+        // EH 的作品頁看得出收在哪個收藏夾，重抓一次讓按鈕跟著變
+        if (d.site == "eh") scope.launch { runCatching { route.detail = Eh.detail(d.id) } }
+    }
+
+    fun run(block: suspend () -> Unit) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                block()
+            } catch (e: SiteFav.NeedLogin) {
+                needLogin = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failed = e.message ?: e.toString()
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val on = route.favorite == true || d.siteFav != null
+    TextButton(enabled = !busy, modifier = modifier, onClick = {
+        run {
+            val auth = FavState.auth[d.site]?.takeIf { it.loggedIn } ?: Auth.status(d.site).also { FavState.auth[d.site] = it }
+            if (!auth.loggedIn) throw SiteFav.NeedLogin(d.site)
+            when (d.site) {
+                "nh" -> {
+                    val cur = route.favorite ?: Nh.isFavorite(d.id)
+                    Nh.setFavorite(d.id, !cur)
+                    route.favorite = !cur
+                    done(if (!cur) "已加到 $label 收藏" else "已從 $label 收藏移除")
+                }
+                "jm" -> done(SiteFav.jm(d))
+                else -> {
+                    val f = SiteFav.form(d)
+                    if (f.choices.size > 1) picker = f else done(SiteFav.submit(d, f, null))
+                }
+            }
+        }
+    }) {
+        Text(
+            when {
+                busy -> "處理中…"
+                on -> "★ 已在 $label 收藏" + (d.siteFav?.let { "（$it）" } ?: "")
+                else -> "☆ 加到 $label 收藏"
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+
+    picker?.let { f ->
+        var choice by remember(f) { mutableStateOf(f.selected) }
+        AlertDialog(
+            onDismissRequest = { picker = null },
+            title = { Text("加到哪個收藏夾？") },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    itemsIndexed(f.choices) { _, (v, name) ->
+                        Row(Modifier.fillMaxWidth().clickable { choice = v }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = choice == v, onClick = { choice = v })
+                            Text(if (v == "favdel") "從收藏移除" else name, color = if (v == "favdel") ErrorColor else Color.White)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker = null
+                    run { done(SiteFav.submit(d, f, choice)) }
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { picker = null }) { Text("取消") } },
+        )
+    }
+
+    if (needLogin) AlertDialog(
+        onDismissRequest = { needLogin = false },
+        title = { Text("需要登入") },
+        text = { Text("要先登入 $label，才能加到網站帳號的收藏。\n（不登入的話，可以用上面的「收藏」存在 App 裡）") },
+        confirmButton = {
+            TextButton(onClick = {
+                needLogin = false
+                FavState.auth.remove(d.site)
+                Nav.push(Route.Login(d.site))
+            }) { Text("登入 $label") }
+        },
+        dismissButton = { TextButton(onClick = { needLogin = false }) { Text("取消") } },
+    )
+
+    failed?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { failed = null },
+            title = { Text("加到網站收藏失敗") },
+            text = { Text("$msg\n\n可以改在 App 裡開這本的網頁，用網站自己的收藏按鈕（跟這裡共用登入）。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    failed = null
+                    Nav.push(Route.Web(d.site, d.url))
+                }) { Text("在網頁上收藏") }
+            },
+            dismissButton = { TextButton(onClick = { failed = null }) { Text("關閉") } },
+        )
+    }
+}
 
 fun toggleFavorite(item: Item) {
     val on = Favorites.toggle(item)

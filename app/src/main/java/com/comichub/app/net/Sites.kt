@@ -524,8 +524,13 @@ object Eh : Site("eh", "EH", 0xFFB5835A, listOf("latest" to "最新", "popular" 
             related = emptyList(),
             url = "$base/g/$gid/$token/",
             firstHtml = s,
+            siteFav = favFolder(doc),
         )
     }
+
+    /** 作品頁右邊的收藏連結：沒收藏是「Add to Favorites」，收藏了會顯示收藏夾名稱 */
+    fun favFolder(doc: org.jsoup.nodes.Document): String? =
+        doc.selectFirst("#favoritelink").txt().takeIf { it.isNotEmpty() && !it.contains("Add to Favorites", true) }
 
     fun pageLinks(s: String): List<String> = html(s).select("#gdt a[href*=/s/]").map { it.attr("href") }
 

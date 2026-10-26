@@ -92,7 +92,7 @@ fun HomeScreen() {
         }
         val lang = Nav.lang
         // 換語言時整個列表重建：舊版列表項目一直拿著換語言前的資料，中文篩選在首頁沒反應（v1.0.2）
-        key(lang) {
+        key(lang, Feeds.version) {
             if (HomeState.site == "all") AllSites(lang) else SiteHome(HomeState.site, lang)
         }
     }
@@ -101,8 +101,8 @@ fun HomeScreen() {
 /** 「全部」：四站各一排最新更新 */
 @Composable
 private fun AllSites(lang: String) {
-    val feeds = remember(lang) { SiteConfig.KEYS.map { k -> k to Feeds.get("home_$k") { site(k).latest(it) } } }
-    val allFailed by remember(lang) { derivedStateOf { feeds.all { it.second.error != null } } }
+    val feeds = remember(lang, Feeds.version) { SiteConfig.KEYS.map { k -> k to Feeds.get("home_$k") { site(k).latest(it) } } }
+    val allFailed by remember(feeds) { derivedStateOf { feeds.all { it.second.error != null } } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         if (allFailed) item {
             Column(
@@ -115,7 +115,7 @@ private fun AllSites(lang: String) {
             }
         }
         for ((k, feed) in feeds) {
-            item(key = "$k|$lang") {
+            item(key = "$k|$lang|${Feeds.version}") {
                 LaunchedEffect(feed) { if (feed.items.isEmpty() && !feed.end && feed.error == null) feed.loadMore() }
                 Column(Modifier.padding(top = 8.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +154,7 @@ private fun SiteHome(key: String, lang: String) {
             sort = it
             Prefs.setSort(key, it)
         }
-        val feed = remember(key, sort, lang) { Feeds.get("site_${key}_$sort") { p -> s.latest(p, sort) } }
+        val feed = remember(key, sort, lang, Feeds.version) { Feeds.get("site_${key}_$sort") { p -> s.latest(p, sort) } }
         FeedGrid(feed)
     }
 }

@@ -68,6 +68,8 @@ data class Detail(
     val reader: List<ReaderPage>? = null,
     /** EH：作品頁的 HTML，閱讀時先用它的縮圖連結，不用再抓一次 */
     val firstHtml: String? = null,
+    /** 已經在網站帳號的收藏裡時是收藏夾名稱（EH 的作品頁看得出來；其他站是 null＝不知道） */
+    val siteFav: String? = null,
 ) {
     fun toItem() = Item(site, id, title, cover, pages?.let { "$it 頁" } ?: "", pages, lang)
 }
