@@ -30,6 +30,7 @@
 | `net/Sites.kt` | 四站轉接層 `Nh` / `Jm` / `Wn` / `Eh`（`parseXxx` 只吃字串，可 JVM 測試）、`Query`（編號搜尋、作者、整理書名） |
 | `net/Auth.kt` | 各站登入狀態（跟桌面版 `checkAuth` / `authStatus` 一樣，含「登入過期」判斷）、帳號名稱、登出 |
 | `data/Store.kt` | `state.json`：紀錄、進度、合集、書櫃分組、下載紀錄（暫存檔改名 + `.bak`） |
+| `data/Favorites.kt` | 本機收藏（state.json 的 `favorites`，四站都能收、不用登入） |
 | `data/History.kt` | 閱讀紀錄與進度（key：`site_id` / `local_檔名` / `col_id`，跟桌面版一樣） |
 | `data/Library.kt` | 書櫃：掃描 CBZ/ZIP、讀 ComicInfo.xml、匯入、分組、合集 |
 | `data/Downloads.kt` / `DownloadService.kt` | 下載成 CBZ（前景服務 + 通知進度） |
@@ -66,7 +67,7 @@
 
 | 位置 | 內容 |
 |---|---|
-| `filesDir/state.json`（+ `.bak`） | 紀錄、閱讀進度、合集、書櫃分組、下載紀錄 |
+| `filesDir/state.json`（+ `.bak`） | 本機收藏、紀錄、閱讀進度、合集、書櫃分組、下載紀錄 |
 | SharedPreferences `prefs` | 語言、首頁分頁、排序、搜尋站、閱讀模式、略過的版本、上次版本、網址覆寫、各站帳號名稱（不存密碼） |
 | `getExternalFilesDir()/downloads`（Android/data/com.comichub.app/files/downloads） | 下載的 CBZ（書櫃）。解除安裝會一起刪除 |
 | `cacheDir/images` | 圖片快取（上限 150 MB） |
@@ -106,3 +107,10 @@
 - 主畫面 Scaffold 的 `contentWindowInsets` 設 0：各分頁自己有 `statusBarsPadding`，原本手機上方會空兩倍高。
 - 本機打包的開發版不再自動跳「發現新版本」。
 - 新增畫面測試工具（Robolectric + Roborazzi，見上面「開發、測試、發布」）。
+
+### v1.0.4（2026-10-26）本機收藏
+- 使用者回報「少了漫畫收藏功能」：原本只有 NH 登入後才有收藏按鈕（桌面版也只有網站帳號的收藏），其他站的作品沒辦法收藏。
+- 新增本機收藏 `data/Favorites.kt`（存在 state.json 的 `favorites`，`Item` 格式，新收的排前面），四個站都能收、不用登入。
+- 作品頁：右上角 ♡ ＋按鈕列的「收藏 / 已收藏」；NH 有登入時另外有「加到網站收藏」文字按鈕（原本的網站收藏移到這裡）。按鈕列加 `contentPadding`、`softWrap = false`，「已收藏」不會斷成兩行。
+- 「收藏」頁：第一個分頁「本機收藏」（看過的顯示看到哪、長按確認後取消），後面是各站的網站帳號收藏；預設停在本機收藏（`Prefs.favSite` 預設 `local`）。
+- 畫面測試 `HomeUiTest.localFavorites`：作品頁按收藏 → 收藏頁看得到 → 長按取消，整段實際操作通過。

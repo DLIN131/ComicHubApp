@@ -1,7 +1,14 @@
 package com.comichub.app.ui
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import com.comichub.app.data.Favorites
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.comichub.app.net.Lang
 import org.junit.Assert.assertTrue
@@ -40,6 +47,51 @@ class HomeUiTest {
             rule.waitForIdle()
         }
         return feeds
+    }
+
+    private fun pump(seconds: Int) = repeat(seconds * 2) {
+        Thread.sleep(500)
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+    }
+
+    /** 作品頁按「收藏」→「收藏」分頁的本機收藏看得到 → 長按取消 */
+    @Test
+    fun localFavorites() {
+        assumeTrue(System.getenv("UI_TEST") == "1")
+        rule.runOnUiThread {
+            Nav.changeLang("")
+            Favorites.items.toList().forEach { Favorites.remove(it) }
+        }
+        val nh = waitFeeds(listOf("nh")).first().second
+        assertTrue("首頁 NH 沒有載入", nh.items.isNotEmpty())
+        val item = nh.items.first()
+        rule.runOnUiThread { Nav.openItem(item) }
+        repeat(30) { if ((Nav.top as? Route.Detail)?.detail == null) pump(1) }
+        shot("detail")
+        rule.onNodeWithText("收藏").performClick()
+        rule.waitForIdle()
+        assertTrue("按了收藏但沒有收進去", Favorites.has(item.site, item.id))
+        shot("detail_faved")
+        rule.onNodeWithText("已收藏").assertExists()
+
+        rule.runOnUiThread {
+            Nav.pop()
+            FavState.site = LOCAL_FAV
+            Nav.tab = Tab.Favorites
+        }
+        pump(2)
+        shot("favorites_local")
+        rule.onNodeWithText("本機收藏").assertExists()
+        rule.onNodeWithText(item.title, substring = true).assertExists()
+
+        // 長按 → 確認取消
+        rule.onNodeWithText(item.title, substring = true).performTouchInput { longClick() }
+        rule.waitForIdle()
+        shot("favorites_remove")
+        rule.onAllNodesWithText("取消收藏").onLast().performClick()
+        rule.waitForIdle()
+        assertTrue("取消收藏沒有成功", !Favorites.has(item.site, item.id))
     }
 
     @Test

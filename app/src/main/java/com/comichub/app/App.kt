@@ -75,7 +75,7 @@ object Prefs {
         set(v) = put("homeSite", v)
 
     var favSite: String
-        get() = str("favSite", "nh")
+        get() = str("favSite", "local")
         set(v) = put("favSite", v)
 
     fun sort(site: String, def: String) = str("sort_$site", def)

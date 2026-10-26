@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.comichub.app.Prefs
 import com.comichub.app.data.Downloads
+import com.comichub.app.data.Favorites
 import com.comichub.app.data.History
 import com.comichub.app.data.Library
 import com.comichub.app.data.Store
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Store.load()
         History.load()
+        Favorites.load()
         Downloads.load()
         AppScope.launch { runCatching { Library.refresh() } }
         handleIntent(intent)

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -55,10 +56,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.comichub.app.Prefs
+import androidx.compose.foundation.layout.size
 import com.comichub.app.data.Downloads
+import com.comichub.app.data.Favorites
 import com.comichub.app.data.History
 import com.comichub.app.net.Chapter
 import com.comichub.app.net.Detail
+import com.comichub.app.net.Item
 import com.comichub.app.net.Net
 import com.comichub.app.net.Nh
 import com.comichub.app.net.Query
@@ -92,20 +96,10 @@ fun DetailScreen(route: Route.Detail) {
             SiteBadge(item.site, small = false)
             Spacer(Modifier.width(8.dp))
             Text(item.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (route.favorite != null) {
-                val on = route.favorite == true
-                val scope = rememberCoroutineScope()
-                IconButton(onClick = {
-                    scope.launch {
-                        try {
-                            Nh.setFavorite(item.id, !on)
-                            route.favorite = !on
-                            toast(if (!on) "已加入網站收藏" else "已從網站收藏移除")
-                        } catch (e: Exception) {
-                            toast("收藏失敗：${e.message}")
-                        }
-                    }
-                }) { Icon(if (on) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, "收藏", tint = if (on) Color(0xFFFF5C7A) else Color.White) }
+            // 本機收藏（每個站都能收，不用登入）
+            val fav = Favorites.has(item.site, item.id)
+            IconButton(onClick = { toggleFavorite(route.detail?.toItem() ?: item) }) {
+                Icon(if (fav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (fav) "取消收藏" else "收藏", tint = if (fav) FavColor else Color.White)
             }
         }
         val d = route.detail
@@ -177,13 +171,37 @@ private fun DetailBody(route: Route.Detail, d: Detail) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    val fav = Favorites.has(d.site, d.id)
+                    val pad = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    OutlinedButton(onClick = { toggleFavorite(d.toItem()) }, contentPadding = pad, modifier = Modifier.weight(1.1f)) {
+                        Icon(if (fav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, null, tint = if (fav) FavColor else Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (fav) "已收藏" else "收藏", maxLines = 1, softWrap = false)
+                    }
                     OutlinedButton(onClick = {
                         if (d.chapters.size > 1) showDownload = true else download(d, listOf(null))
-                    }, modifier = Modifier.weight(1f)) { Text("下載 CBZ") }
-                    OutlinedButton(onClick = { showSearch = true }, modifier = Modifier.weight(1f)) { Text("用此漫畫搜尋") }
-                    OutlinedButton(onClick = {
+                    }, contentPadding = pad, modifier = Modifier.weight(0.9f)) { Text("下載", maxLines = 1) }
+                    OutlinedButton(onClick = { showSearch = true }, contentPadding = pad, modifier = Modifier.weight(1.4f)) { Text("用此漫畫搜尋", maxLines = 1, softWrap = false) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(d.url))) }
-                    }) { Text("網頁") }
+                    }) { Text("用瀏覽器開網頁") }
+                    // NH 有登入時，也可以加到網站帳號的收藏
+                    route.favorite?.let { on ->
+                        val scope = rememberCoroutineScope()
+                        TextButton(onClick = {
+                            scope.launch {
+                                try {
+                                    Nh.setFavorite(d.id, !on)
+                                    route.favorite = !on
+                                    toast(if (!on) "已加入網站收藏" else "已從網站收藏移除")
+                                } catch (e: Exception) {
+                                    toast("網站收藏失敗：${e.message}")
+                                }
+                            }
+                        }) { Text(if (on) "★ 已在網站收藏" else "☆ 加到網站收藏") }
+                    }
                 }
                 if (d.chapters.size > 1) {
                     Spacer(Modifier.height(10.dp))
@@ -297,6 +315,13 @@ private fun ChapterChip(c: Chapter, current: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     )
+}
+
+val FavColor = Color(0xFFFF5C7A)
+
+fun toggleFavorite(item: Item) {
+    val on = Favorites.toggle(item)
+    toast(if (on) "已加入收藏" else "已取消收藏")
 }
 
 private fun download(d: Detail, chapters: List<Chapter?>) {

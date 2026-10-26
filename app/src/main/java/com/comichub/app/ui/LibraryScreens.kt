@@ -72,6 +72,8 @@ import com.comichub.app.Prefs
 import com.comichub.app.data.Book
 import com.comichub.app.data.Collection
 import com.comichub.app.data.Downloads
+import com.comichub.app.data.Favorites
+import com.comichub.app.net.Item
 import com.comichub.app.data.History
 import com.comichub.app.data.Library
 import com.comichub.app.net.Auth
@@ -89,19 +91,70 @@ object FavState {
     val auth = HashMap<String, AuthState>()
 }
 
+/** 「收藏」分頁的第一個：本機收藏 */
+const val LOCAL_FAV = "local"
+
 @Composable
 fun FavoritesScreen() {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            SectionTitle("網站收藏", Modifier.weight(1f))
+            SectionTitle("收藏", Modifier.weight(1f))
             LangButton()
         }
-        val tabs = SiteConfig.KEYS.map { it to SiteConfig.label(it) }
-        SiteTabs(tabs, FavState.site, colorOf = { siteColor(it) }) {
+        // 本機收藏＋各站的網站帳號收藏
+        val tabs = listOf(LOCAL_FAV to "本機收藏") + SiteConfig.KEYS.map { it to SiteConfig.label(it) }
+        SiteTabs(tabs, FavState.site, colorOf = { if (it == LOCAL_FAV) FavColor else siteColor(it) }) {
             FavState.site = it
             Prefs.favSite = it
         }
-        val key = FavState.site
+        if (FavState.site == LOCAL_FAV) LocalFavorites() else SiteFavorites(FavState.site)
+    }
+}
+
+@Composable
+private fun LocalFavorites() {
+    val lang = Nav.lang
+    val list = Favorites.items.filter { lang.isEmpty() || it.lang == lang }
+    var removing by remember { mutableStateOf<Item?>(null) }
+    if (list.isEmpty()) {
+        CenterText(
+            if (Favorites.items.isEmpty()) "還沒有收藏。\n在作品頁按 ♡ 收藏，四個站都可以收、不用登入。\n（登入網站帳號的收藏在右邊各站的分頁）"
+            else "沒有${Lang.NAMES[lang] ?: ""}的收藏",
+        )
+    } else LazyVerticalGrid(
+        columns = GridColumns,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = GridPadding,
+        horizontalArrangement = GridSpacing,
+        verticalArrangement = GridSpacing,
+    ) {
+        fullWidth("hint") { Text("共 ${list.size} 本・長按可以取消收藏", color = Muted, fontSize = 12.sp) }
+        items(list, key = { it.key }) { item ->
+            // 看過的顯示看到哪
+            val p = History.progress(item.key)
+            ItemCard(item.copy(sub = p?.let { "看到：${it.text}" } ?: item.sub), onLongClick = { removing = item })
+        }
+    }
+    removing?.let { item ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("取消收藏？") },
+            text = { Text(item.title, maxLines = 3, overflow = TextOverflow.Ellipsis) },
+            confirmButton = {
+                TextButton(onClick = {
+                    Favorites.remove(item)
+                    removing = null
+                    toast("已取消收藏")
+                }) { Text("取消收藏") }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("保留") } },
+        )
+    }
+}
+
+@Composable
+private fun SiteFavorites(key: String) {
+    Column(Modifier.fillMaxSize()) {
         var auth by remember(key) { mutableStateOf(FavState.auth[key]) }
         var attempt by remember(key) { mutableStateOf(0) }
         LaunchedEffect(key, attempt) {
@@ -136,7 +189,7 @@ fun FavoritesScreen() {
             }
             else -> {
                 val feed = remember(key, lang) { Feeds.get("fav_$key") { site(key).favorites(it) } }
-                FeedGrid(feed, empty = "收藏是空的")
+                FeedGrid(feed, empty = "網站上的收藏是空的")
             }
         }
     }
