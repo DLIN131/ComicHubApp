@@ -13,8 +13,9 @@ val keystoreProps = Properties().apply {
 fun signingValue(prop: String, env: String): String? = System.getenv(env) ?: keystoreProps.getProperty(prop)
 
 val releaseStoreFile = signingValue("storeFile", "SIGNING_STORE_FILE")?.let { rootProject.file(it) }
-// CI 以 build 編號當 versionCode，新版才能覆蓋安裝舊版
-val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 1
+// CI 以 build 編號當 versionCode，新版才能覆蓋安裝舊版；本機打包的版本名稱是 1.0.dev
+val ciBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull()
+val buildNumber = ciBuild ?: 1
 
 android {
     namespace = "com.comichub.app"
@@ -25,7 +26,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = if (ciBuild != null) "1.0.$ciBuild" else "1.0.dev"
     }
 
     signingConfigs {
